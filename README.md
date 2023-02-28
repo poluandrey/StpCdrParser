@@ -1,0 +1,1 @@
+Provide CLI for parsing CDR files. Wrote for python version 2.6
