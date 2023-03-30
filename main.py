@@ -32,7 +32,7 @@ def argument_parser():
     parser.add_argument('--src-gt', help='source GT.', nargs='*', dest='src_gt', type=str)
     parser.add_argument(
         '--file-path',
-        help='path to folder with log files',
+        help='path to folder with CDR files',
         dest='file_path',
         required=True)
     parser.add_argument(
@@ -61,10 +61,10 @@ class CdrParser:
         self.map_code = map_code
         self.dst_gt = dst_gt
         self.src_gt = src_gt
-        self.cdr_files = list(
+        self.cdr_files = sorted(list(
             map(
                 lambda x: os.path.join(self.file_path, x),
-                filter(lambda x: self.file_mask in x, os.listdir(self.file_path))))
+                filter(lambda x: self.file_mask in x, os.listdir(self.file_path)))))
         self.cdr = []
         if file_postfix:
             self.output_file = '{0}-{1}'.format(output_file, file_postfix)
@@ -79,8 +79,11 @@ class CdrParser:
     def parse_file(self):
         for zip_file in self.cdr_files:
             logger.info('start parse file: {0}'.format(zip_file))
+            logger.debug('start open gzip file')
             f_gz = xopen(zip_file)
-            for cdr_record in f_gz:
+            logger.debug('finished open gzip file')
+            start_parsing_time = datetime.now()
+            for i, cdr_record in enumerate(f_gz):
                 try:
                     cdr_obj = json.loads(cdr_record)
                 except ValueError:
@@ -88,20 +91,25 @@ class CdrParser:
                     cdr_record = re.sub(r'(:"\d*\.\d*\.\w*)""', r'\g<1>"', cdr_record)
                     cdr_obj = json.loads(cdr_record)
                 cdr = self.parse_cdr_rec(cdr_obj)
-
                 for record in cdr:
                     if self.filter_cdr(record):
-                        logger.debug(record)
                         self.cdr.append(record)
+                if i % 1000 == 0:
+                    parsing_duration = datetime.now() - start_parsing_time
+                    parsing_duration_sec = '{0}.{1}'.format(parsing_duration.seconds, parsing_duration.microseconds)
+                    logger.debug('1000 rows parsed in {1} seconds'.format(i, parsing_duration_sec))
+                    start_parsing_time = datetime.now()
             f_gz.close()
+            logger.info('finished parse file: {0}'.format(zip_file))
 
     def print_cdr(self):
         print('\n'.join(str(cdr) for cdr in self.cdr))
 
     def save_to_file(self):
+        logger.debug('start save cdr to file')
         with open(self.output_file, 'w', 0) as csv_f:
             csv_writer = csv.writer(csv_f, delimiter=';')
-            csv_writer.writerow(['TS', 'MAP_CODE', 'DTID', 'OTID', 'SCCP_A', 'SCCP_B', 'SMS_A', 'SMS_B', 'IMSI'])
+            csv_writer.writerow(['TS', 'MAP_CODE', 'DTID', 'OTID', 'SCCP_A', 'SCCP_B', 'SMS_A', 'SMS_B', 'IMSI_A'])
             for cdr in self.cdr:
                 try:
                     csv_writer.writerow(
@@ -109,9 +117,9 @@ class CdrParser:
                          cdr['SCCP']['A'], cdr['SCCP']['B'], cdr['SMS']['A'], cdr['SMS']['B'], cdr['SMS']['IMSI_A']])
                 except KeyError:
                     pass
+        logger.debug('finished save cdr to file')
 
     def filter_cdr(self, cdr):
-        logger.debug(cdr)
         if not any((self.link, self.map_code, self.dst_gt)):
             return True
         link_filter = True
