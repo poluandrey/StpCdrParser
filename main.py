@@ -69,7 +69,8 @@ class CdrParser:
         if file_postfix:
             self.output_file = '{0}-{1}'.format(output_file, file_postfix)
         else:
-            self.output_file = '{0}-{1}.csv'.format(output_file, (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d"))
+            self.output_file = '{0}-{1}.csv'.format(output_file,
+                                                    (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d"))
         logger.info('link filter: {0}'.format(self.link))
         logger.info('map_code filter: {0}'.format(self.map_code))
         logger.info('dst_gt filter: {0}'.format(self.dst_gt))
@@ -87,9 +88,19 @@ class CdrParser:
                 try:
                     cdr_obj = json.loads(cdr_record)
                 except ValueError:
-                    cdr_record = cdr_record.replace('."', '.')
-                    cdr_record = re.sub(r'(:"\d*\.\d*\.\w*)""', r'\g<1>"', cdr_record)
-                    cdr_obj = json.loads(cdr_record)
+                    logger.error(cdr_record)
+                    decoded_str = cdr_record.decode('utf-8')
+                    try:
+                        cdr_obj = json.loads(decoded_str)
+                    except Exception as e:
+                        logger.exception(e)
+                    # cdr_record = cdr_record.replace('."', '.')
+                    # cdr_record = re.sub(r'(:"\d*\.\d*\.\w*)""', r'\g<1>"', cdr_record)
+                    # try:
+                    #    cdr_obj = json.loads(cdr_record)
+                    # except ValueError:
+                    #    logger.error('can not serialize cdr')
+                    #    logger.error(cdr_record)
                 cdr = self.parse_cdr_rec(cdr_obj)
                 for record in cdr:
                     if self.filter_cdr(record):
